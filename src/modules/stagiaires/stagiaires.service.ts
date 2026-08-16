@@ -1,0 +1,177 @@
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Stagiaire } from './entities/stagiaire.entity';
+import { StagiaireStatut } from './enums/stagiaire-statut.enum';
+import { StagiaireRapportStatut } from './enums/stagiaire-rapport-statut.enum';
+import { CreateStagiaireDto } from './dto/create-stagiaire.dto';
+import { UpdateStagiaireDto } from './dto/update-stagiaire.dto';
+import { AffectationDto } from './dto/affectation.dto';
+import { EvaluationRapportDto } from './dto/evaluation-rapport.dto';
+import { RequestUser } from '../auth/jwt.strategy';
+import { Role } from '../../common/enums/role.enum';
+import { Sujet } from '../sujets/entities/sujet.entity';
+import { RapportsService } from '../rapports/rapports.service';
+import { UploadsService } from '../uploads/uploads.service';
+
+@Injectable()
+export class StagiairesService {
+  constructor(
+    @InjectRepository(Stagiaire)
+    private readonly stagiaireRepository: Repository<Stagiaire>,
+    @InjectRepository(Sujet)
+    private readonly sujetRepository: Repository<Sujet>,
+    private readonly rapportsService: RapportsService,
+    private readonly uploadsService: UploadsService,
+  ) {}
+
+  findAll(): Promise<Stagiaire[]> {
+    return this.stagiaireRepository.find();
+  }
+
+  async findOne(id: number): Promise<Stagiaire> {
+    const stagiaire = await this.stagiaireRepository.findOne({ where: { id } });
+    if (!stagiaire) {
+      throw new NotFoundException(`Stagiaire ${id} introuvable.`);
+    }
+    return stagiaire;
+  }
+
+  create(dto: CreateStagiaireDto): Promise<Stagiaire> {
+    // Valeurs par défaut imposées par le serveur (§3 du spec) — jamais
+    // laissées au choix du client, même si le DTO ne les expose pas déjà.
+    const stagiaire = this.stagiaireRepository.create({
+      ...dto,
+      avancement: 0,
+      statut: StagiaireStatut.A_VENIR,
+      rapportStatut: StagiaireRapportStatut.NON_DEPOSE,
+      compteActif: true,
+    });
+    return this.stagiaireRepository.save(stagiaire);
+  }
+
+  async update(id: number, dto: UpdateStagiaireDto): Promise<Stagiaire> {
+    const stagiaire = await this.findOne(id);
+    Object.assign(stagiaire, dto);
+    return this.stagiaireRepository.save(stagiaire);
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.stagiaireRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(`Stagiaire ${id} introuvable.`);
+    }
+  }
+
+  /**
+   * PATCH /stagiaires/:id/affectation
+   *
+   * Résout encadrantName via une requête directe sur la table "encadrants"
+   * plutôt qu'en important l'entité Encadrant (le module encadrants n'existe
+   * pas encore à ce stade du projet). Cette requête ne fonctionnera qu'une
+   * fois la table "encadrants" créée par sa propre migration — à remplacer
+   * par un EncadrantsService injecté une fois ce module construit, pour un
+   * code plus robuste (typé, sans SQL brut).
+   */
+  async affecterEncadrant(id: number, dto: AffectationDto): Promise<Stagiaire> {
+    const stagiaire = await this.findOne(id);
+
+    const rows: Array<{ name: string }> = await this.stagiaireRepository.manager.query(
+      'SELECT name FROM encadrants WHERE id = $1',
+      [dto.encadrantId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(`Encadrant ${dto.encadrantId} introuvable.`);
+    }
+
+    stagiaire.encadrantId = dto.encadrantId ?? null;
+    stagiaire.encadrantName = rows[0].name;
+
+    return this.stagiaireRepository.save(stagiaire);
+  }
+
+  /**
+   * POST /stagiaires/:id/rapport
+   *
+   * Upload réel vers S3 (bucket MinIO local pour l'instant, voir
+   * discussion — bucket public, pas d'URL signée) via UploadsService.
+   * Applique ensuite la règle métier du §3 : passage à "En attente",
+   * horodatage du dépôt, effacement du commentaire de correction précédent.
+   */
+  // Use a broad type for uploaded file to avoid issues with differing multer/express types
+  async deposerRapport(id: number, file: any): Promise<Stagiaire> {
+    const stagiaire = await this.findOne(id);
+
+    const uploaded = await this.uploadsService.uploadFile(file, 'rapports');
+
+    stagiaire.rapportStatut = StagiaireRapportStatut.EN_ATTENTE;
+    stagiaire.rapportFichierNom = uploaded.fileName;
+    stagiaire.rapportFichierUrl = uploaded.fileUrl;
+    stagiaire.rapportDateDepot = new Date();
+    stagiaire.rapportCommentaire = null;
+
+    return this.stagiaireRepository.save(stagiaire);
+  }
+
+  /**
+   * PATCH /stagiaires/:id/rapport/evaluation
+   *
+   * Règle §1 du spec : vérifie que l'encadrant connecté est bien celui
+   * assigné à ce stagiaire avant d'autoriser l'évaluation. La vérification
+   * du rôle (Encadrant) elle-même reste au niveau du controller via
+   * @Roles(Role.ENCADRANT) — ici on ne vérifie que la propriété fine
+   * (CE encadrant sur CE stagiaire précis), ce qu'un guard générique
+   * ne peut pas faire.
+   */
+  async evaluerRapport(
+    id: number,
+    dto: EvaluationRapportDto,
+    requestUser: RequestUser,
+  ): Promise<Stagiaire> {
+    const stagiaire = await this.findOne(id);
+
+    if (requestUser.role !== Role.ENCADRANT || stagiaire.encadrantId !== requestUser.id) {
+      throw new ForbiddenException(
+        "Vous n'êtes pas autorisé à évaluer le rapport de ce stagiaire.",
+      );
+    }
+
+    stagiaire.rapportStatut = dto.statut;
+    stagiaire.rapportCommentaire = dto.commentaire ?? null;
+
+    const saved = await this.stagiaireRepository.save(stagiaire);
+
+    // §7 : quand un rapport est validé, création automatique d'une entrée
+    // dans la bibliothèque. titre/resume proviennent du Sujet assigné au
+    // stagiaire (décision prise en conversation — aucun champ dédié
+    // titre/resume n'existe sur Stagiaire).
+    if (dto.statut === StagiaireRapportStatut.VALIDE && stagiaire.sujetId) {
+      const sujet = await this.sujetRepository.findOne({
+        where: { id: stagiaire.sujetId },
+      });
+
+      if (sujet) {
+        await this.rapportsService.createFromStagiaire({
+          titre: sujet.titre,
+          resume: sujet.description ?? '',
+          auteur: stagiaire.name,
+          ecole: stagiaire.ecole,
+          encadrant: stagiaire.encadrantName ?? '',
+          departement: stagiaire.departement,
+          technologies: sujet.technologies,
+          fichierUrl: stagiaire.rapportFichierUrl ?? null,
+        });
+      }
+      // Si le sujet est introuvable, aucune entrée bibliothèque n'est créée
+      // — même logique de tolérance que candidatures.service.ts (ne bloque
+      // pas l'évaluation elle-même).
+    }
+
+    return saved;
+  }
+}
