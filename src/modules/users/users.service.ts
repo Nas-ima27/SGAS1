@@ -9,6 +9,7 @@ import { User } from '../auth/entities/user.entity';
 import { Role } from '../../common/enums/role.enum';
 import { MailService } from '../mail/mail.service';
 import { Utilisateur } from './entities/user.entity';
+import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
 
 /** Génère un mot de passe temporaire lisible mais suffisamment aléatoire. */
 function generateTempPassword(): string {
@@ -25,6 +26,7 @@ export class UsersService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly mailService: MailService,
+    private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
   findAll(): Promise<Utilisateur[]> {
@@ -38,8 +40,10 @@ export class UsersService {
    * Envoie les identifiants générés par email via Resend (MailService).
    */
   async create(dto: CreateUtilisateurDto): Promise<Utilisateur> {
+    const email = this.emailUniquenessService.normalize(dto.email);
+    await this.emailUniquenessService.assertAvailable(email);
     const existingUser = await this.userRepository.findOne({
-      where: { email: dto.email },
+      where: { email },
     });
     if (existingUser) {
       throw new ConflictException('Un compte existe déjà avec cet email.');
@@ -48,7 +52,7 @@ export class UsersService {
     const utilisateur = this.utilisateurRepository.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
-      email: dto.email,
+      email,
       service: dto.service,
     });
     await this.utilisateurRepository.save(utilisateur);
@@ -58,7 +62,7 @@ export class UsersService {
 
     const user = this.userRepository.create({
       name: `${dto.firstName} ${dto.lastName}`,
-      email: dto.email,
+      email,
       passwordHash,
       role: Role.ADMIN,
       encadrantId: null,
@@ -69,9 +73,9 @@ export class UsersService {
     await this.userRepository.save(user);
 
     await this.mailService.sendCredentialsEmail({
-      to: dto.email,
+      to: email,
       nom: `${dto.firstName} ${dto.lastName}`,
-      email: dto.email,
+      email,
       motDePasseTemporaire: tempPassword,
     });
 

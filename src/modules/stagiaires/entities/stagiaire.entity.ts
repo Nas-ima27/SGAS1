@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { StagiaireStatut } from '../enums/stagiaire-statut.enum';
 import { StagiaireRapportStatut } from '../enums/stagiaire-rapport-statut.enum';
+import { TypeStage } from '../enums/type-stage.enum';
 
 @Entity('stagiaires')
 export class Stagiaire {
@@ -36,6 +37,10 @@ export class Stagiaire {
 
   @Column()
     filiere!: string;
+
+  /** PFA (Projet de Fin d'Année) ou PFE (Projet de Fin d'Études). */
+  @Column({ type: 'enum', enum: TypeStage })
+    typeStage!: TypeStage;
 
   @Column()
     departement!: string;

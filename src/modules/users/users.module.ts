@@ -5,6 +5,7 @@ import { UsersService } from './users.service';
 import { User } from '../auth/entities/user.entity';
 import { MailModule } from '../mail/mail.module';
 import { Utilisateur } from './entities/user.entity';
+import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqueness.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { Utilisateur } from './entities/user.entity';
     // annuaire — voir users.service.ts.
     TypeOrmModule.forFeature([Utilisateur, User]),
     MailModule,
+    EmailUniquenessModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

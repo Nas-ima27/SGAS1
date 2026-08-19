@@ -6,25 +6,10 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { SujetStatut } from '../enums/sujet-statut.enum';
+import { TypeCandidatSujet } from '../enums/type-candidat-sujet.enum';
 
 /**
  * Voir BACKEND_SPEC.md §5 pour le modèle complet et les endpoints associés.
- *
- * IMPORTANT :
- * - nombreCandidatures n'est PAS une colonne ici — calculé à la lecture
- *   par SujetsService (COUNT sur candidatures), même logique que les
- *   champs calculés d'Encadrant.
- * - sujetsSimilaires n'est pas non plus stocké — c'est un résultat
- *   d'analyse à la volée (POST /sujets/similarity-check), jamais persisté.
- * - encadrantId reste une simple colonne (pas de relation TypeORM), même
- *   raisonnement que sur Stagiaire.encadrantId : éviter une dépendance
- *   circulaire entre modules.
- * - technologies utilise le support natif des tableaux PostgreSQL
- *   (simple-array aurait stocké une chaîne séparée par virgules ; ici on
- *   utilise un vrai array Postgres, plus propre pour des requêtes futures
- *   type "WHERE 'React' = ANY(technologies)"). Si le besoin d'un GROUP BY
- *   par technologie individuelle devient pressant pour le dashboard (§9),
- *   on migrera vers une table sujet_technologies séparée à ce moment-là.
  */
 @Entity('sujets')
 export class Sujet {
@@ -39,6 +24,14 @@ export class Sujet {
 
   @Column()
     departement!: string;
+
+  /** Type de candidat visé : PFA, PFE, ou les deux. */
+  @Column({
+        type: 'enum',
+        enum: TypeCandidatSujet,
+        default: TypeCandidatSujet.PFA_ET_PFE,
+    })
+    typeCandidat: TypeCandidatSujet = TypeCandidatSujet.PFA_ET_PFE;
 
   @Column({ type: 'int' })
     encadrantId!: number;

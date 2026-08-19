@@ -7,16 +7,10 @@ import {
   IsString,
 } from 'class-validator';
 import { SujetStatut } from './../enums/sujet-statut.enum';
+import { TypeCandidatSujet } from './../enums/type-candidat-sujet.enum';
 
 /**
  * Payload attendu par POST /sujets (voir BACKEND_SPEC.md §5).
- *
- * encadrantId ET encadrantName sont tous les deux fournis par le client
- * ici (contrairement à Stagiaire où encadrantName est résolu côté
- * serveur lors de l'affectation) — le spec liste explicitement les deux
- * dans le payload attendu pour ce endpoint. Le service pourra tout de
- * même revalider encadrantName côté serveur si on veut plus de rigueur
- * plus tard.
  */
 export class CreateSujetDto {
   @IsString()
@@ -30,6 +24,10 @@ export class CreateSujetDto {
   @IsString()
     @IsNotEmpty({ message: 'Le département est requis.' })
     departement!: string;
+
+  @IsOptional()
+  @IsEnum(TypeCandidatSujet, { message: 'typeCandidat doit être "PFA", "PFE" ou "PFA et PFE".' })
+  typeCandidat?: TypeCandidatSujet;
 
   @IsInt()
     encadrantId!: number;

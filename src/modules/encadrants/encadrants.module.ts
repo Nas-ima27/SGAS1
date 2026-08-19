@@ -4,6 +4,7 @@ import { EncadrantsController } from './encadrants.controller';
 import { EncadrantsService } from './encadrants.service';
 import { Encadrant } from './entities/encadrant.entity';
 import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
+import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqueness.module';
 
 @Module({
   // Stagiaire est importé ici en plus d'Encadrant car EncadrantsService
@@ -11,7 +12,7 @@ import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
   // (voir encadrants.service.ts) — TypeOrmModule.forFeature doit lister
   // toutes les entités dont ce module a besoin, même si Stagiaire "appartient"
   // conceptuellement au module stagiaires.
-  imports: [TypeOrmModule.forFeature([Encadrant, Stagiaire])],
+  imports: [TypeOrmModule.forFeature([Encadrant, Stagiaire]), EmailUniquenessModule],
   controllers: [EncadrantsController],
   providers: [EncadrantsService],
   exports: [EncadrantsService],

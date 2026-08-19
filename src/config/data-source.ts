@@ -18,6 +18,8 @@ import { CreateJournalEntriesTable1786526579902 } from '../migrations/1786526579
 import { AddIsSuperAdminToUsers1786531640866 } from '../migrations/1786531640866-AddIsSuperAdminToUsers';
 import { Utilisateur } from '../modules/users/entities/user.entity';
 import { CreateUtilisateursTable1786533830067 } from '../migrations/1786533830067-CreateUtilisateursTable';
+import { EnforceUniqueAccountEmails1786535000000 } from '../migrations/1786535000000-EnforceUniqueAccountEmails';
+import { AddTypeStageAndTypeCandidat1787127569056 } from '../migrations/1787127569056-AddTypeStageAndTypeCandidat';
 
 dotenv.config();
 
@@ -39,7 +41,9 @@ export const dataSourceOptions: DataSourceOptions = {
                 CreateRapportsTable1786524979103,
                 CreateJournalEntriesTable1786526579902,
                 AddIsSuperAdminToUsers1786531640866,
-                CreateUtilisateursTable1786533830067,], // Add your migration classes here
+                CreateUtilisateursTable1786533830067,
+                EnforceUniqueAccountEmails1786535000000,
+                AddTypeStageAndTypeCandidat1787127569056], // Add your migration classes here
 
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

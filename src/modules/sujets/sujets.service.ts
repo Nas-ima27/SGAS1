@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Sujet } from './entities/sujet.entity';
 import { SujetStatut } from './enums/sujet-statut.enum';
+import { TypeCandidatSujet } from './enums/type-candidat-sujet.enum';
 import { CreateSujetDto } from './dto/create-sujet.dto';
 import { UpdateSujetDto } from './dto/update-sujet.dto';
 import { SimilarityCheckDto } from './dto/similarity-check.dto';
@@ -70,6 +71,7 @@ export class SujetsService {
     const sujet = this.sujetRepository.create({
       ...dto,
       statut: dto.statut ?? SujetStatut.BROUILLON,
+      typeCandidat: dto.typeCandidat ?? TypeCandidatSujet.PFA_ET_PFE,
     });
     const saved = await this.sujetRepository.save(sujet);
     return this.withCount(saved);

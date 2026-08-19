@@ -6,12 +6,14 @@ import { Stagiaire } from './entities/stagiaire.entity';
 import { Sujet } from '../sujets/entities/sujet.entity';
 import { RapportsModule } from '../rapports/rapports.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqueness.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Stagiaire, Sujet]),
     RapportsModule,
     UploadsModule,
+    EmailUniquenessModule,
   ],
   controllers: [StagiairesController],
   providers: [StagiairesService],

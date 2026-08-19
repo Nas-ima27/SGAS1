@@ -13,6 +13,7 @@ import {
 import { EncadrantsService } from './encadrants.service';
 import { CreateEncadrantDto } from './dto/create-encadrant.dto';
 import { UpdateEncadrantDto } from './dto/update-encadrant.dto';
+import { UpdateEncadrantProfileDto } from './dto/update-encadrant-profile.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -64,5 +65,22 @@ export class EncadrantsController {
   @Roles(Role.ADMIN)
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEncadrantDto) {
     return this.encadrantsService.update(id, dto);
+  }
+
+  /**
+   * PATCH /encadrants/:id/profile
+   * Réservé à l'Encadrant propriétaire — modifie uniquement son téléphone.
+   */
+  @Patch(':id/profile')
+  @Roles(Role.ENCADRANT)
+  updateProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateEncadrantProfileDto,
+    @Req() req: RequestWithUser,
+  ) {
+    if (req.user.id !== id) {
+      throw new ForbiddenException('Vous ne pouvez modifier que votre propre profil.');
+    }
+    return this.encadrantsService.updateProfile(id, dto);
   }
 }

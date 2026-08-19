@@ -16,9 +16,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StagiairesService } from './stagiaires.service';
 import { CreateStagiaireDto } from './dto/create-stagiaire.dto';
-import { UpdateStagiaireDto } from './dto/update-stagiaire.dto';
+import { UpdateStagiaireDto, UpdateStagiaireDto as UpdateStagiairePayloadDto } from './dto/update-stagiaire.dto';
 import { AffectationDto } from './dto/affectation.dto';
 import { EvaluationRapportDto } from './dto/evaluation-rapport.dto';
+import { UpdateStagiaireProfileDto } from './dto/update-stagiaire-profile.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -134,5 +135,23 @@ export class StagiairesController {
     @Req() req: RequestWithUser,
   ) {
     return this.stagiairesService.evaluerRapport(id, dto, req.user);
+  }
+
+  /**
+   * PATCH /stagiaires/:id/profile
+   * Réservé au Stagiaire propriétaire — modifie uniquement ses infos
+   * personnelles (telephone, linkedin, github, bio).
+   */
+  @Patch(':id/profile')
+  @Roles(Role.STAGIAIRE)
+  updateProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStagiaireProfileDto,
+    @Req() req: RequestWithUser,
+  ) {
+    if (req.user.id !== id) {
+      throw new ForbiddenException('Vous ne pouvez modifier que votre propre profil.');
+    }
+    return this.stagiairesService.updateProfile(id, dto);
   }
 }

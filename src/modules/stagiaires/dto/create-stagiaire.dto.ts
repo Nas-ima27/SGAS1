@@ -1,22 +1,16 @@
 import {
   IsDateString,
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
+import { TypeStage } from '../enums/type-stage.enum';
 
 /**
  * Payload attendu par POST /stagiaires (voir BACKEND_SPEC.md §3).
- *
- * Les champs calculés/par défaut côté serveur (avancement=0,
- * statut="À venir", rapportStatut="Non déposé", compteActif=true)
- * ne figurent volontairement PAS dans ce DTO — le ValidationPipe global
- * (whitelist + forbidNonWhitelisted, voir main.ts) rejette la requête
- * si le frontend tentait de les envoyer, conformément à la règle §11.3
- * du spec ("les champs calculés ne doivent jamais être modifiables
- * directement via un PATCH").
  */
 export class CreateStagiaireDto {
   @IsString()
@@ -33,6 +27,9 @@ export class CreateStagiaireDto {
   @IsString()
     @IsNotEmpty({ message: 'La filière est requise.' })
     filiere!: string;
+
+  @IsEnum(TypeStage, { message: 'typeStage doit être "PFA" ou "PFE".' })
+    typeStage!: TypeStage;
 
   @IsString()
     @IsNotEmpty({ message: 'Le département est requis.' })

@@ -6,7 +6,8 @@ import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
 import { StagiaireStatut } from '../stagiaires/enums/stagiaire-statut.enum';
 import { CreateEncadrantDto } from './dto/create-encadrant.dto';
 import { UpdateEncadrantDto } from './dto/update-encadrant.dto';
-
+import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
+import { UpdateEncadrantProfileDto } from './dto/update-encadrant-profile.dto';
 /** Forme exacte attendue par le frontend (voir BACKEND_SPEC.md §4). */
 export type EncadrantWithStats = Encadrant & {
   stagiairesActifs: number;
@@ -25,12 +26,27 @@ export class EncadrantsService {
     // la logique métier complète de ce service.
     @InjectRepository(Stagiaire)
     private readonly stagiaireRepository: Repository<Stagiaire>,
+    private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
   async findAll(): Promise<EncadrantWithStats[]> {
     const encadrants = await this.encadrantRepository.find();
     return Promise.all(encadrants.map((e) => this.withStats(e)));
   }
+  /**
+ * PATCH /encadrants/:id/profile
+ * L'Encadrant modifie son propre téléphone. Vérification de propriété
+ * (req.user.id === id) faite dans le controller.
+ */
+async updateProfile(id: number, dto: UpdateEncadrantProfileDto): Promise<EncadrantWithStats> {
+  const encadrant = await this.encadrantRepository.findOne({ where: { id } });
+  if (!encadrant) {
+    throw new NotFoundException(`Encadrant ${id} introuvable.`);
+  }
+  Object.assign(encadrant, dto);
+  const saved = await this.encadrantRepository.save(encadrant);
+  return this.withStats(saved);
+}
 
   async findOne(id: number): Promise<EncadrantWithStats> {
     const encadrant = await this.encadrantRepository.findOne({ where: { id } });
@@ -41,8 +57,11 @@ export class EncadrantsService {
   }
 
   async create(dto: CreateEncadrantDto): Promise<EncadrantWithStats> {
+    const email = this.emailUniquenessService.normalize(dto.email);
+    await this.emailUniquenessService.assertAvailable(email);
     const encadrant = this.encadrantRepository.create({
       ...dto,
+      email,
       compteActif: true,
     });
     const saved = await this.encadrantRepository.save(encadrant);
@@ -53,6 +72,13 @@ export class EncadrantsService {
     const encadrant = await this.encadrantRepository.findOne({ where: { id } });
     if (!encadrant) {
       throw new NotFoundException(`Encadrant ${id} introuvable.`);
+    }
+    if (dto.email) {
+      dto.email = this.emailUniquenessService.normalize(dto.email);
+      await this.emailUniquenessService.assertAvailable(dto.email, {
+        entity: 'encadrant',
+        id,
+      });
     }
     Object.assign(encadrant, dto);
     const saved = await this.encadrantRepository.save(encadrant);

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -17,6 +18,20 @@ import { Role } from '../../common/enums/role.enum';
 import { Sujet } from '../sujets/entities/sujet.entity';
 import { RapportsService } from '../rapports/rapports.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
+import { UpdateStagiaireProfileDto } from './dto/update-stagiaire-profile.dto';
+function validateStageDates(dateDebut: string, dateFin: string): void {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (dateDebut < today) {
+    throw new BadRequestException('La date de debut ne peut pas etre dans le passe.');
+  }
+  if (dateFin <= dateDebut) {
+    throw new BadRequestException(
+      'La date de fin doit etre strictement posterieure a la date de debut.',
+    );
+  }
+}
 
 @Injectable()
 export class StagiairesService {
@@ -27,6 +42,7 @@ export class StagiairesService {
     private readonly sujetRepository: Repository<Sujet>,
     private readonly rapportsService: RapportsService,
     private readonly uploadsService: UploadsService,
+    private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
   findAll(): Promise<Stagiaire[]> {
@@ -40,12 +56,27 @@ export class StagiairesService {
     }
     return stagiaire;
   }
+  /**
+ * PATCH /stagiaires/:id/profile
+ * Le Stagiaire modifie ses propres informations personnelles
+ * (telephone, linkedin, github, bio) — jamais les champs administratifs.
+ * La vérification que req.user.id === id se fait dans le controller.
+ */
+async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiaire> {
+  const stagiaire = await this.findOne(id);
+  Object.assign(stagiaire, dto);
+  return this.stagiaireRepository.save(stagiaire);
+}
 
-  create(dto: CreateStagiaireDto): Promise<Stagiaire> {
+  async create(dto: CreateStagiaireDto): Promise<Stagiaire> {
+    validateStageDates(dto.dateDebut, dto.dateFin);
+    const email = this.emailUniquenessService.normalize(dto.email);
+    await this.emailUniquenessService.assertAvailable(email);
     // Valeurs par défaut imposées par le serveur (§3 du spec) — jamais
     // laissées au choix du client, même si le DTO ne les expose pas déjà.
     const stagiaire = this.stagiaireRepository.create({
       ...dto,
+      email,
       avancement: 0,
       statut: StagiaireStatut.A_VENIR,
       rapportStatut: StagiaireRapportStatut.NON_DEPOSE,
@@ -56,6 +87,16 @@ export class StagiairesService {
 
   async update(id: number, dto: UpdateStagiaireDto): Promise<Stagiaire> {
     const stagiaire = await this.findOne(id);
+    if (dto.dateDebut || dto.dateFin) {
+      validateStageDates(dto.dateDebut ?? stagiaire.dateDebut, dto.dateFin ?? stagiaire.dateFin);
+    }
+    if (dto.email) {
+      dto.email = this.emailUniquenessService.normalize(dto.email);
+      await this.emailUniquenessService.assertAvailable(dto.email, {
+        entity: 'stagiaire',
+        id,
+      });
+    }
     Object.assign(stagiaire, dto);
     return this.stagiaireRepository.save(stagiaire);
   }
