@@ -2,21 +2,13 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 
 import { CreateUtilisateurDto } from './dto/create-utilisateur.dto';
 import { User } from '../auth/entities/user.entity';
 import { Role } from '../../common/enums/role.enum';
-import { MailService } from '../mail/mail.service';
 import { Utilisateur } from './entities/user.entity';
 import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
-
-/** Génère un mot de passe temporaire lisible mais suffisamment aléatoire. */
-function generateTempPassword(): string {
-  // 12 caractères hexadécimaux — simple, pas de caractères ambigus (0/O, 1/l),
-  // suffisant pour un mot de passe temporaire destiné à être changé rapidement.
-  return crypto.randomBytes(6).toString('hex');
-}
+import { generateDefaultPassword } from '../../common/utils/default-password.util';
 
 @Injectable()
 export class UsersService {
@@ -25,7 +17,6 @@ export class UsersService {
     private readonly utilisateurRepository: Repository<Utilisateur>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly mailService: MailService,
     private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
@@ -37,9 +28,20 @@ export class UsersService {
    * POST /users
    * Crée l'entrée annuaire (Utilisateur) ET un compte de connexion (User,
    * role=Admin) dans la même opération — décision prise en conversation.
-   * Envoie les identifiants générés par email via Resend (MailService).
+   *
+   * CORRECTIF : mot de passe par défaut PRÉVISIBLE (2 lettres nom + 3
+   * lettres prénom + date de création, JJMMAAAA — voir
+   * generateDefaultPassword) au lieu d'un mot de passe aléatoire envoyé
+   * uniquement par email. L'envoi par email (Resend) est désactivé pour
+   * le moment (décision prise en conversation — domaine sandbox
+   * onboarding@resend.dev peu fiable) : l'admin communique lui-même ce
+   * mot de passe, affiché une seule fois dans la réponse (voir
+   * AddUserModal.tsx). Le compte doit le changer via "Changer mon mot de
+   * passe" dès sa première connexion (voir AuthService.changePassword).
    */
-  async create(dto: CreateUtilisateurDto): Promise<Utilisateur> {
+  async create(
+    dto: CreateUtilisateurDto,
+  ): Promise<Utilisateur & { tempPassword: string }> {
     const email = this.emailUniquenessService.normalize(dto.email);
     await this.emailUniquenessService.assertAvailable(email);
     const existingUser = await this.userRepository.findOne({
@@ -57,7 +59,11 @@ export class UsersService {
     });
     await this.utilisateurRepository.save(utilisateur);
 
-    const tempPassword = generateTempPassword();
+    const tempPassword = generateDefaultPassword({
+      nom: dto.lastName,
+      prenom: dto.firstName,
+      date: new Date(),
+    });
     const passwordHash = await bcrypt.hash(tempPassword, 10);
 
     const user = this.userRepository.create({
@@ -69,16 +75,13 @@ export class UsersService {
       stagiaireId: null,
       compteActif: true,
       isSuperAdmin: dto.isSuperAdmin ?? false,
+      // Mot de passe par défaut prévisible (voir tempPassword ci-dessus)
+      // — bloque l'accès à l'app tant qu'il n'est pas changé, voir
+      // AuthService.changePassword et ProtectedRoute côté frontend.
+      mustChangePassword: true,
     });
     await this.userRepository.save(user);
 
-    await this.mailService.sendCredentialsEmail({
-      to: email,
-      nom: `${dto.firstName} ${dto.lastName}`,
-      email,
-      motDePasseTemporaire: tempPassword,
-    });
-
-    return utilisateur;
+    return { ...utilisateur, tempPassword };
   }
 }

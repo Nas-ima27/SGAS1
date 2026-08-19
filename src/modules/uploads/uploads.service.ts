@@ -74,12 +74,20 @@ export class UploadsService {
       }),
     );
 
-    const endpoint = process.env.AWS_S3_ENDPOINT;
+    // AWS_S3_ENDPOINT est le point d'accès INTERNE utilisé par le SDK pour
+    // parler à MinIO depuis le conteneur backend (ex: http://minio:9000,
+    // un nom de service Docker injoignable depuis le navigateur).
+    // AWS_S3_PUBLIC_URL est l'URL PUBLIQUE, accessible depuis le poste de
+    // l'utilisateur (ex: http://localhost:9000), utilisée uniquement pour
+    // construire les liens de téléchargement renvoyés au frontend.
+    // Sans cette distinction, les liens "voir le fichier" pointaient vers
+    // "minio:9000", résolvable seulement à l'intérieur du réseau Docker.
+    const publicEndpoint = process.env.AWS_S3_PUBLIC_URL || process.env.AWS_S3_ENDPOINT;
     // Style "path" avec MinIO (endpoint/bucket/key), cohérent avec
     // forcePathStyle ci-dessus ; style "virtual-hosted" classique pour
     // le vrai AWS S3 (bucket.s3.region.amazonaws.com/key).
-    const fileUrl = endpoint
-      ? `${endpoint}/${this.bucket}/${key}`
+    const fileUrl = publicEndpoint
+      ? `${publicEndpoint}/${this.bucket}/${key}`
       : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
 
     return { key, fileUrl, fileName: file.originalname };

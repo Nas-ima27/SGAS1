@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { Stagiaire } from './entities/stagiaire.entity';
 import { StagiaireStatut } from './enums/stagiaire-statut.enum';
 import { StagiaireRapportStatut } from './enums/stagiaire-rapport-statut.enum';
@@ -14,12 +15,14 @@ import { UpdateStagiaireDto } from './dto/update-stagiaire.dto';
 import { AffectationDto } from './dto/affectation.dto';
 import { EvaluationRapportDto } from './dto/evaluation-rapport.dto';
 import { RequestUser } from '../auth/jwt.strategy';
+import { User } from '../auth/entities/user.entity';
 import { Role } from '../../common/enums/role.enum';
 import { Sujet } from '../sujets/entities/sujet.entity';
 import { RapportsService } from '../rapports/rapports.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
 import { UpdateStagiaireProfileDto } from './dto/update-stagiaire-profile.dto';
+import { generateDefaultPassword, splitPrenomNom } from '../../common/utils/default-password.util';
 function validateStageDates(dateDebut: string, dateFin: string): void {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -40,6 +43,8 @@ export class StagiairesService {
     private readonly stagiaireRepository: Repository<Stagiaire>,
     @InjectRepository(Sujet)
     private readonly sujetRepository: Repository<Sujet>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly rapportsService: RapportsService,
     private readonly uploadsService: UploadsService,
     private readonly emailUniquenessService: EmailUniquenessService,
@@ -68,7 +73,18 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
   return this.stagiaireRepository.save(stagiaire);
 }
 
-  async create(dto: CreateStagiaireDto): Promise<Stagiaire> {
+  /**
+   * CORRECTIF : crée aussi le compte de connexion (User, role=Stagiaire)
+   * lié à cette fiche — auparavant absent : seul le seed de démo créait un
+   * compte pour un Stagiaire (sara.elamrani@emi.ac.ma), un Stagiaire ajouté
+   * via l'UI n'avait donc aucun moyen de se connecter.
+   *
+   * Mot de passe par défaut PRÉVISIBLE (2 lettres nom + 3 lettres prénom +
+   * date de début de stage, JJMMAAAA — voir generateDefaultPassword),
+   * renvoyé une seule fois dans la réponse pour que l'admin le communique
+   * (pas d'email automatique, voir UsersService.create pour le contexte).
+   */
+  async create(dto: CreateStagiaireDto): Promise<Stagiaire & { tempPassword: string }> {
     validateStageDates(dto.dateDebut, dto.dateFin);
     const email = this.emailUniquenessService.normalize(dto.email);
     await this.emailUniquenessService.assertAvailable(email);
@@ -82,7 +98,28 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
       rapportStatut: StagiaireRapportStatut.NON_DEPOSE,
       compteActif: true,
     });
-    return this.stagiaireRepository.save(stagiaire);
+    const saved = await this.stagiaireRepository.save(stagiaire);
+
+    const { prenom, nom } = splitPrenomNom(saved.name);
+    const tempPassword = generateDefaultPassword({ nom, prenom, date: saved.dateDebut });
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    const user = this.userRepository.create({
+      name: saved.name,
+      email,
+      passwordHash,
+      role: Role.STAGIAIRE,
+      encadrantId: null,
+      stagiaireId: saved.id,
+      compteActif: true,
+      // Mot de passe par défaut prévisible (voir tempPassword ci-dessus)
+      // — bloque l'accès à l'app tant qu'il n'est pas changé, voir
+      // AuthService.changePassword et ProtectedRoute côté frontend.
+      mustChangePassword: true,
+    });
+    await this.userRepository.save(user);
+
+    return { ...saved, tempPassword };
   }
 
   async update(id: number, dto: UpdateStagiaireDto): Promise<Stagiaire> {

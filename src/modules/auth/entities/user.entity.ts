@@ -68,6 +68,19 @@ export class User {
   @Column({ default: false })
   isSuperAdmin!: boolean;
 
+  /**
+   * true = ce compte doit changer son mot de passe avant de pouvoir
+   * utiliser l'application (voir ProtectedRoute côté frontend, qui bloque
+   * toute navigation tant que ce flag est vrai). Mis à true à la création
+   * de tout compte avec mot de passe par défaut prévisible (voir
+   * default-password.util.ts — Utilisateur/Encadrant/Stagiaire), remis à
+   * false par AuthService.changePassword(). Les comptes de démo créés par
+   * les seeds (create-admin.seed.ts, etc.) le mettent explicitement à
+   * false pour ne pas gêner les tests répétés avec des identifiants connus.
+   */
+  @Column({ default: true })
+  mustChangePassword!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

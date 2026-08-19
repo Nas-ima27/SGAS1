@@ -1,6 +1,13 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequestUser } from './jwt.strategy';
+
+interface RequestWithUser {
+  user: RequestUser;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -37,5 +44,28 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(): Promise<void> {
     return;
+  }
+
+  /**
+   * PATCH /auth/change-password
+   * Body   : { currentPassword, newPassword }
+   * Réponse: { mustChangePassword: false }
+   *
+   * Accessible à tout compte connecté (Admin, Encadrant, Stagiaire) — pas
+   * de @Roles ici, contrairement à UsersController. Ajouté pour que
+   * chaque compte puisse remplacer son mot de passe par défaut prévisible
+   * (voir default-password.util.ts) par un mot de passe de son choix.
+   *
+   * Renvoie un corps (pas juste 204) : le frontend en a besoin pour lever
+   * immédiatement le blocage ProtectedRoute sans repasser par un login.
+   */
+  @Patch('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Req() req: RequestWithUser,
+  ): Promise<{ mustChangePassword: boolean }> {
+    return this.authService.changePassword(req.user.userId, dto);
   }
 }

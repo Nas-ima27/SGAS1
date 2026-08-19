@@ -2,19 +2,15 @@ import * as bcrypt from 'bcrypt';
 import dataSource from '../config/data-source';
 import { User } from '../modules/auth/entities/user.entity';
 import { Role } from '../common/enums/role.enum';
+import { Encadrant } from '../modules/encadrants/entities/encadrant.entity';
 
 /**
- * Crée le compte de connexion Encadrant de test défini dans
- * FRONTEND_ARCHITECTURE.md §5 :
- *   email    : karima.alaoui@sgas.ma
- *   password : encadrant123
- *   role     : Encadrant, lié à Encadrant.id = 1 (Karima Alaoui)
+ * MODIFIÉ — ce script crée maintenant l'Encadrant lui-même (plus besoin
+ * de le créer manuellement via POST /encadrants/Postman au préalable) :
+ * décision prise pour permettre un démarrage 100% automatique (Docker),
+ * sans intervention manuelle.
  *
- * Suppose que l'Encadrant "Karima Alaoui" (id 1) existe déjà en base
- * (créé lors des tests Postman du module encadrants) — si ce n'est pas
- * le cas, crée-le d'abord via POST /encadrants avant de lancer ce script.
- *
- * Idempotent, comme create-admin.seed.ts.
+ * Idempotent : si un Encadrant avec cet email existe déjà, ne recrée rien.
  *
  * Usage : npm run seed:encadrant
  */
@@ -22,42 +18,47 @@ async function run() {
   await dataSource.initialize();
 
   const userRepository = dataSource.getRepository(User);
+  const encadrantRepository = dataSource.getRepository(Encadrant);
 
   const email = 'karima.alaoui@sgas.ma';
-  const existing = await userRepository.findOne({ where: { email } });
 
-  if (existing) {
+  const existingUser = await userRepository.findOne({ where: { email } });
+  if (existingUser) {
     // eslint-disable-next-line no-console
     console.log(`Le compte ${email} existe déjà — rien à faire.`);
     await dataSource.destroy();
     return;
   }
 
-  // Vérifie que l'Encadrant lié existe bien, pour un message d'erreur clair
-  // plutôt qu'une contrainte SQL obscure si jamais il manque.
-  const encadrantRows: Array<{ id: number }> = await dataSource.query(
-    'SELECT id FROM encadrants WHERE id = $1',
-    [1],
-  );
-  if (encadrantRows.length === 0) {
+  // Crée l'Encadrant s'il n'existe pas déjà (par email), réutilise sinon.
+  let encadrant = await encadrantRepository.findOne({ where: { email } });
+  if (!encadrant) {
+    encadrant = encadrantRepository.create({
+      name: 'Karima Alaoui',
+      title: 'Ingénieure Senior',
+      departement: "Systèmes d'Information",
+      email,
+      compteActif: true,
+    });
+    encadrant = await encadrantRepository.save(encadrant);
     // eslint-disable-next-line no-console
-    console.error(
-      "Aucun Encadrant avec id=1 en base. Crée-le d'abord via POST /encadrants (voir tests Postman du module encadrants).",
-    );
-    await dataSource.destroy();
-    process.exit(1);
+    console.log(`Encadrant créé : ${encadrant.name} (id=${encadrant.id})`);
   }
 
   const passwordHash = await bcrypt.hash('encadrant123', 10);
 
   const encadrantUser = userRepository.create({
-    name: 'Karima Alaoui',
+    name: encadrant.name,
     email,
     passwordHash,
     role: Role.ENCADRANT,
-    encadrantId: 1,
+    encadrantId: encadrant.id,
     stagiaireId: null,
     compteActif: true,
+    // Compte de démo, identifiants documentés et réutilisés à chaque
+    // test — pas de mot de passe par défaut à changer (voir
+    // AddMustChangePasswordToUsers, mustChangePassword côté User).
+    mustChangePassword: false,
   });
 
   await userRepository.save(encadrantUser);

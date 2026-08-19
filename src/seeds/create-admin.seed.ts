@@ -20,7 +20,7 @@ async function run() {
 
   const userRepository = dataSource.getRepository(User);
 
-  const email = 'yasmine.bennani@sgas.ma';
+  const email = 'admin.royalairmaroc@sgas.ma';
   const existing = await userRepository.findOne({ where: { email } });
 
   if (existing) {
@@ -33,7 +33,7 @@ async function run() {
   const passwordHash = await bcrypt.hash('admin123', 10);
 
   const admin = userRepository.create({
-    name: 'Yasmine Bennani',
+    name: 'Administrateur Royal Air Maroc',
     email,
     passwordHash,
     role: Role.ADMIN,
@@ -41,6 +41,10 @@ async function run() {
     stagiaireId: null,
     compteActif: true,
     isSuperAdmin: true,
+    // Compte de démo, identifiants documentés et réutilisés à chaque
+    // test — pas de mot de passe par défaut à changer (voir
+    // AddMustChangePasswordToUsers, mustChangePassword côté User).
+    mustChangePassword: false,
   });
 
   await userRepository.save(admin);

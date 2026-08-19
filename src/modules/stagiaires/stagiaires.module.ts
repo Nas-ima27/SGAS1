@@ -7,10 +7,15 @@ import { Sujet } from '../sujets/entities/sujet.entity';
 import { RapportsModule } from '../rapports/rapports.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqueness.module';
+// User importé ici (pas juste Stagiaire) car StagiairesService crée
+// désormais aussi un compte de connexion à la création d'un Stagiaire
+// (auparavant absent : seul le seed de démo en créait un) — voir
+// stagiaires.service.ts.
+import { User } from '../auth/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Stagiaire, Sujet]),
+    TypeOrmModule.forFeature([Stagiaire, Sujet, User]),
     RapportsModule,
     UploadsModule,
     EmailUniquenessModule,

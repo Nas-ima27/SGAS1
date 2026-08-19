@@ -20,6 +20,8 @@ import { Utilisateur } from '../modules/users/entities/user.entity';
 import { CreateUtilisateursTable1786533830067 } from '../migrations/1786533830067-CreateUtilisateursTable';
 import { EnforceUniqueAccountEmails1786535000000 } from '../migrations/1786535000000-EnforceUniqueAccountEmails';
 import { AddTypeStageAndTypeCandidat1787127569056 } from '../migrations/1787127569056-AddTypeStageAndTypeCandidat';
+import { FixUniqueAccountEmailAllowLinkedPair1787200000000 } from '../migrations/1787200000000-FixUniqueAccountEmailAllowLinkedPair';
+import { AddMustChangePasswordToUsers1787300000000 } from '../migrations/1787300000000-AddMustChangePasswordToUsers';
 
 dotenv.config();
 
@@ -43,7 +45,9 @@ export const dataSourceOptions: DataSourceOptions = {
                 AddIsSuperAdminToUsers1786531640866,
                 CreateUtilisateursTable1786533830067,
                 EnforceUniqueAccountEmails1786535000000,
-                AddTypeStageAndTypeCandidat1787127569056], // Add your migration classes here
+                AddTypeStageAndTypeCandidat1787127569056,
+                FixUniqueAccountEmailAllowLinkedPair1787200000000,
+                AddMustChangePasswordToUsers1787300000000], // Add your migration classes here
 
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

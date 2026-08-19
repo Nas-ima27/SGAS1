@@ -4,6 +4,7 @@ import { EncadrantsController } from './encadrants.controller';
 import { EncadrantsService } from './encadrants.service';
 import { Encadrant } from './entities/encadrant.entity';
 import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
+import { User } from '../auth/entities/user.entity';
 import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqueness.module';
 
 @Module({
@@ -11,8 +12,9 @@ import { EmailUniquenessModule } from '../../common/email-uniqueness/email-uniqu
   // injecte Repository<Stagiaire> pour calculer stagiairesActifs/totalEncadres
   // (voir encadrants.service.ts) — TypeOrmModule.forFeature doit lister
   // toutes les entités dont ce module a besoin, même si Stagiaire "appartient"
-  // conceptuellement au module stagiaires.
-  imports: [TypeOrmModule.forFeature([Encadrant, Stagiaire]), EmailUniquenessModule],
+  // conceptuellement au module stagiaires. User ajouté : EncadrantsService
+  // crée désormais aussi le compte de connexion lié (voir encadrants.service.ts).
+  imports: [TypeOrmModule.forFeature([Encadrant, Stagiaire, User]), EmailUniquenessModule],
   controllers: [EncadrantsController],
   providers: [EncadrantsService],
   exports: [EncadrantsService],

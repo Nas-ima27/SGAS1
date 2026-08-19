@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { Encadrant } from './entities/encadrant.entity';
 import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
 import { StagiaireStatut } from '../stagiaires/enums/stagiaire-statut.enum';
@@ -8,6 +9,9 @@ import { CreateEncadrantDto } from './dto/create-encadrant.dto';
 import { UpdateEncadrantDto } from './dto/update-encadrant.dto';
 import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
 import { UpdateEncadrantProfileDto } from './dto/update-encadrant-profile.dto';
+import { User } from '../auth/entities/user.entity';
+import { Role } from '../../common/enums/role.enum';
+import { generateDefaultPassword, splitPrenomNom } from '../../common/utils/default-password.util';
 /** Forme exacte attendue par le frontend (voir BACKEND_SPEC.md §4). */
 export type EncadrantWithStats = Encadrant & {
   stagiairesActifs: number;
@@ -26,6 +30,8 @@ export class EncadrantsService {
     // la logique métier complète de ce service.
     @InjectRepository(Stagiaire)
     private readonly stagiaireRepository: Repository<Stagiaire>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
@@ -56,7 +62,19 @@ async updateProfile(id: number, dto: UpdateEncadrantProfileDto): Promise<Encadra
     return this.withStats(encadrant);
   }
 
-  async create(dto: CreateEncadrantDto): Promise<EncadrantWithStats> {
+  /**
+   * CORRECTIF : crée aussi le compte de connexion (User, role=Encadrant)
+   * lié à cette fiche — auparavant absent : seul le seed de démo créait un
+   * compte pour un Encadrant (karima.alaoui@sgas.ma), un Encadrant ajouté
+   * via l'UI n'avait donc aucun moyen de se connecter.
+   *
+   * Mot de passe par défaut PRÉVISIBLE (2 lettres nom + 3 lettres prénom +
+   * date de création du compte, JJMMAAAA — pas de date "métier" équivalente
+   * à un dateDebut de stage ici — voir generateDefaultPassword), renvoyé
+   * une seule fois dans la réponse (`tempPassword`) pour que l'admin le
+   * communique (pas d'email automatique, voir UsersService.create).
+   */
+  async create(dto: CreateEncadrantDto): Promise<EncadrantWithStats & { tempPassword: string }> {
     const email = this.emailUniquenessService.normalize(dto.email);
     await this.emailUniquenessService.assertAvailable(email);
     const encadrant = this.encadrantRepository.create({
@@ -65,7 +83,28 @@ async updateProfile(id: number, dto: UpdateEncadrantProfileDto): Promise<Encadra
       compteActif: true,
     });
     const saved = await this.encadrantRepository.save(encadrant);
-    return this.withStats(saved);
+
+    const { prenom, nom } = splitPrenomNom(saved.name);
+    const tempPassword = generateDefaultPassword({ nom, prenom, date: new Date() });
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    const user = this.userRepository.create({
+      name: saved.name,
+      email,
+      passwordHash,
+      role: Role.ENCADRANT,
+      encadrantId: saved.id,
+      stagiaireId: null,
+      compteActif: true,
+      // Mot de passe par défaut prévisible (voir tempPassword ci-dessus)
+      // — bloque l'accès à l'app tant qu'il n'est pas changé, voir
+      // AuthService.changePassword et ProtectedRoute côté frontend.
+      mustChangePassword: true,
+    });
+    await this.userRepository.save(user);
+
+    const withStats = await this.withStats(saved);
+    return { ...withStats, tempPassword };
   }
 
   async update(id: number, dto: UpdateEncadrantDto): Promise<EncadrantWithStats> {
