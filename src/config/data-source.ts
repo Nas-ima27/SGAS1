@@ -22,6 +22,9 @@ import { EnforceUniqueAccountEmails1786535000000 } from '../migrations/178653500
 import { AddTypeStageAndTypeCandidat1787127569056 } from '../migrations/1787127569056-AddTypeStageAndTypeCandidat';
 import { FixUniqueAccountEmailAllowLinkedPair1787200000000 } from '../migrations/1787200000000-FixUniqueAccountEmailAllowLinkedPair';
 import { AddMustChangePasswordToUsers1787300000000 } from '../migrations/1787300000000-AddMustChangePasswordToUsers';
+import { AddCommentaireEncadrantToJournalEntries1787400000000 } from '../migrations/1787400000000-AddCommentaireEncadrantToJournalEntries';
+import { CreateTachesTable1787500000000 } from '../migrations/1787500000000-CreateTachesTable';
+import { Tache } from '../modules/taches/entities/tache.entity';
 
 dotenv.config();
 
@@ -33,7 +36,7 @@ export const dataSourceOptions: DataSourceOptions = {
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'sgas',
 
-  entities: [User, Stagiaire, Encadrant, Sujet, Candidature,Rapport,JournalEntry,Utilisateur],
+  entities: [User, Stagiaire, Encadrant, Sujet, Candidature,Rapport,JournalEntry,Utilisateur,Tache],
   migrations: [CreateUsersTable1786462325673,
                CreateStagiairesTable1786479914514,
                CreateEncadrantsTable1786489718770,
@@ -47,7 +50,9 @@ export const dataSourceOptions: DataSourceOptions = {
                 EnforceUniqueAccountEmails1786535000000,
                 AddTypeStageAndTypeCandidat1787127569056,
                 FixUniqueAccountEmailAllowLinkedPair1787200000000,
-                AddMustChangePasswordToUsers1787300000000], // Add your migration classes here
+                AddMustChangePasswordToUsers1787300000000,
+                AddCommentaireEncadrantToJournalEntries1787400000000,
+                CreateTachesTable1787500000000], // Add your migration classes here
 
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

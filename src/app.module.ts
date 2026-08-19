@@ -8,6 +8,7 @@ import { EncadrantsModule } from './modules/encadrants/encadrants.module';
 import { SujetsModule } from './modules/sujets/sujets.module';
 import { CandidaturesModule } from './modules/candidatures/candidatures.module';
 import { JournalModule } from './modules/journal/journal.module';
+import { TachesModule } from './modules/taches/taches.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { UsersModule } from './modules/users/users.module';
 @Module({
@@ -30,6 +31,7 @@ import { UsersModule } from './modules/users/users.module';
     SujetsModule,
     CandidaturesModule,
     JournalModule,
+    TachesModule,
     DashboardModule,
     UsersModule,
     // Les autres modules métier (sujets, candidatures, rapports, journal,

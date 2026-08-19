@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -13,6 +14,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JournalService } from './journal.service';
 import { CreateJournalEntryDto } from './dto/create-journal-entry.dto';
+import { AddJournalCommentDto } from './dto/add-journal-comment.dto';
 import { Stagiaire } from '../stagiaires/entities/stagiaire.entity';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -84,5 +86,43 @@ export class JournalController {
       throw new ForbiddenException('Vous ne pouvez écrire que dans votre propre journal.');
     }
     return this.journalService.create(stagiaireId, dto);
+  }
+
+  /**
+   * PATCH /stagiaires/:id/journal/:entryId/commentaire
+   * Réservé à l'encadrant assigné à ce stagiaire — donne un retour sur une
+   * entrée précise du journal (le journal restait jusqu'ici strictement
+   * lecture seule côté encadrant).
+   */
+  @Patch(':entryId/commentaire')
+  @Roles(Role.ENCADRANT)
+  async addComment(
+    @Param('id', ParseIntPipe) stagiaireId: number,
+    @Param('entryId', ParseIntPipe) entryId: number,
+    @Body() dto: AddJournalCommentDto,
+    @Req() req: RequestWithUser,
+  ) {
+    await this.assertEncadrantOwnsStagiaire(stagiaireId, req.user.id);
+    return this.journalService.addComment(stagiaireId, entryId, dto);
+  }
+
+  /**
+   * Vérification de propriété Encadrant→Stagiaire, factorisée : utilisée
+   * par addComment ci-dessus, le même contrôle existe dans findAll (pas
+   * refactorisé ici pour rester proche du code déjà en place et limiter
+   * le diff).
+   */
+  private async assertEncadrantOwnsStagiaire(
+    stagiaireId: number,
+    encadrantId: number,
+  ): Promise<void> {
+    const stagiaire = await this.stagiaireRepository.findOne({
+      where: { id: stagiaireId },
+    });
+    if (!stagiaire || stagiaire.encadrantId !== encadrantId) {
+      throw new ForbiddenException(
+        'Vous ne pouvez commenter que le journal de vos propres stagiaires.',
+      );
+    }
   }
 }

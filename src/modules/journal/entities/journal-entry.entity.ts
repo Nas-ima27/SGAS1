@@ -25,4 +25,15 @@ export class JournalEntry {
 
   @Column({ type: 'text' })
   contenu!: string;
+
+  /**
+   * Commentaire de l'encadrant sur cette entrée précise (voir
+   * JournalController.addComment) — nullable, un encadrant peut ne
+   * jamais commenter une entrée donnée. Un seul commentaire par entrée
+   * (pas d'historique/fil de discussion) : suffisant pour le besoin
+   * actuel ("donner un commentaire sur le journal"), à faire évoluer si
+   * un vrai fil de discussion devient nécessaire.
+   */
+  @Column({ type: 'text', nullable: true })
+  commentaireEncadrant!: string | null;
 }
