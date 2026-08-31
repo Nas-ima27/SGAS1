@@ -37,6 +37,7 @@ export class DashboardService {
 
   /** GET /dashboard/stats — un seul appel composite (§9), pour éviter le sur-fetching. */
   async getStats(): Promise<DashboardStats> {
+    await this.synchroniserStatutsAvecDates();
     const [
       stagiairesActifs,
       sujetsDisponibles,
@@ -64,6 +65,22 @@ export class DashboardService {
       repartitionParDepartement,
       technologiesLesPlusUtilisees,
     };
+  }
+
+  private async synchroniserStatutsAvecDates(): Promise<void> {
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const stagiaires = await this.stagiaireRepository.find();
+    const aMettreAJour = stagiaires.filter((stagiaire) => {
+      const statutAttendu = aujourdHui < stagiaire.dateDebut
+        ? StagiaireStatut.A_VENIR
+        : aujourdHui >= stagiaire.dateFin
+          ? StagiaireStatut.TERMINE
+          : StagiaireStatut.EN_COURS;
+      if (stagiaire.statut === statutAttendu) return false;
+      stagiaire.statut = statutAttendu;
+      return true;
+    });
+    if (aMettreAJour.length > 0) await this.stagiaireRepository.save(aMettreAJour);
   }
 
   /**

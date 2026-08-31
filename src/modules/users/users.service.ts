@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -9,6 +9,7 @@ import { Role } from '../../common/enums/role.enum';
 import { Utilisateur } from './entities/user.entity';
 import { EmailUniquenessService } from '../../common/email-uniqueness/email-uniqueness.service';
 import { generateDefaultPassword } from '../../common/utils/default-password.util';
+import { UtilisateurStatus } from './enums/utilisateur-statut.enum';
 
 @Injectable()
 export class UsersService {
@@ -22,6 +23,21 @@ export class UsersService {
 
   findAll(): Promise<Utilisateur[]> {
     return this.utilisateurRepository.find();
+  }
+
+  async updateStatus(id: number, status: UtilisateurStatus): Promise<Utilisateur> {
+    const utilisateur = await this.utilisateurRepository.findOne({ where: { id } });
+    if (!utilisateur) {
+      throw new NotFoundException(`Utilisateur ${id} introuvable.`);
+    }
+
+    utilisateur.status = status;
+    const saved = await this.utilisateurRepository.save(utilisateur);
+    await this.userRepository.update(
+      { email: saved.email },
+      { compteActif: status === UtilisateurStatus.ACTIF },
+    );
+    return saved;
   }
 
   /**

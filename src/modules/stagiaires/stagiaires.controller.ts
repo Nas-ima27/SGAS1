@@ -20,6 +20,7 @@ import { UpdateStagiaireDto, UpdateStagiaireDto as UpdateStagiairePayloadDto } f
 import { AffectationDto } from './dto/affectation.dto';
 import { EvaluationRapportDto } from './dto/evaluation-rapport.dto';
 import { UpdateStagiaireProfileDto } from './dto/update-stagiaire-profile.dto';
+import { UpdateAvancementDto } from './dto/update-avancement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -97,6 +98,16 @@ export class StagiairesController {
   @Roles(Role.ADMIN)
   affecter(@Param('id', ParseIntPipe) id: number, @Body() dto: AffectationDto) {
     return this.stagiairesService.affecterEncadrant(id, dto);
+  }
+
+  @Patch(':id/avancement')
+  @Roles(Role.ENCADRANT)
+  updateAvancement(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateAvancementDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.stagiairesService.updateAvancement(id, dto.avancement, req.user);
   }
 
   /**

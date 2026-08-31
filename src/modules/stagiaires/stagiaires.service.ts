@@ -50,16 +50,34 @@ export class StagiairesService {
     private readonly emailUniquenessService: EmailUniquenessService,
   ) {}
 
-  findAll(): Promise<Stagiaire[]> {
+  async findAll(): Promise<Stagiaire[]> {
+    await this.synchroniserStatutsAvecDates();
     return this.stagiaireRepository.find();
   }
 
   async findOne(id: number): Promise<Stagiaire> {
+    await this.synchroniserStatutsAvecDates();
     const stagiaire = await this.stagiaireRepository.findOne({ where: { id } });
     if (!stagiaire) {
       throw new NotFoundException(`Stagiaire ${id} introuvable.`);
     }
     return stagiaire;
+  }
+
+  async synchroniserStatutsAvecDates(): Promise<void> {
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const stagiaires = await this.stagiaireRepository.find();
+    const aMettreAJour = stagiaires.filter((stagiaire) => {
+      const statutAttendu = aujourdHui < stagiaire.dateDebut
+        ? StagiaireStatut.A_VENIR
+        : aujourdHui >= stagiaire.dateFin
+          ? StagiaireStatut.TERMINE
+          : StagiaireStatut.EN_COURS;
+      if (stagiaire.statut === statutAttendu) return false;
+      stagiaire.statut = statutAttendu;
+      return true;
+    });
+    if (aMettreAJour.length > 0) await this.stagiaireRepository.save(aMettreAJour);
   }
   /**
  * PATCH /stagiaires/:id/profile
@@ -135,7 +153,14 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
       });
     }
     Object.assign(stagiaire, dto);
-    return this.stagiaireRepository.save(stagiaire);
+    const saved = await this.stagiaireRepository.save(stagiaire);
+    if (dto.compteActif !== undefined) {
+      await this.userRepository.update(
+        { stagiaireId: id, role: Role.STAGIAIRE },
+        { compteActif: dto.compteActif },
+      );
+    }
+    return saved;
   }
 
   async remove(id: number): Promise<void> {
@@ -173,6 +198,21 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
     return this.stagiaireRepository.save(stagiaire);
   }
 
+  async updateAvancement(
+    id: number,
+    avancement: number,
+    requestUser: RequestUser,
+  ): Promise<Stagiaire> {
+    const stagiaire = await this.findOne(id);
+    if (requestUser.role !== Role.ENCADRANT || stagiaire.encadrantId !== requestUser.id) {
+      throw new ForbiddenException(
+        "Vous n'êtes pas autorisé à évaluer l'avancement de ce stagiaire.",
+      );
+    }
+    stagiaire.avancement = avancement;
+    return this.stagiaireRepository.save(stagiaire);
+  }
+
   /**
    * POST /stagiaires/:id/rapport
    *
@@ -184,6 +224,19 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
   // Use a broad type for uploaded file to avoid issues with differing multer/express types
   async deposerRapport(id: number, file: any): Promise<Stagiaire> {
     const stagiaire = await this.findOne(id);
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+
+    if (aujourdHui < stagiaire.dateDebut) {
+      throw new BadRequestException(
+        'Le rapport ne peut être déposé qu’à partir de la date de début du stage.',
+      );
+    }
+
+    if (!stagiaire.sujetId) {
+      throw new BadRequestException(
+        'Le rapport ne peut être déposé qu’après l’acceptation de votre candidature à un sujet.',
+      );
+    }
 
     const uploaded = await this.uploadsService.uploadFile(file, 'rapports');
 
@@ -212,6 +265,7 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
     requestUser: RequestUser,
   ): Promise<Stagiaire> {
     const stagiaire = await this.findOne(id);
+    const etaitDejaValide = stagiaire.rapportStatut === StagiaireRapportStatut.VALIDE;
 
     if (requestUser.role !== Role.ENCADRANT || stagiaire.encadrantId !== requestUser.id) {
       throw new ForbiddenException(
@@ -221,6 +275,9 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
 
     stagiaire.rapportStatut = dto.statut;
     stagiaire.rapportCommentaire = dto.commentaire ?? null;
+    if (dto.statut === StagiaireRapportStatut.VALIDE) {
+      stagiaire.avancement = 100;
+    }
 
     const saved = await this.stagiaireRepository.save(stagiaire);
 
@@ -228,10 +285,10 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
     // dans la bibliothèque. titre/resume proviennent du Sujet assigné au
     // stagiaire (décision prise en conversation — aucun champ dédié
     // titre/resume n'existe sur Stagiaire).
-    if (dto.statut === StagiaireRapportStatut.VALIDE && stagiaire.sujetId) {
-      const sujet = await this.sujetRepository.findOne({
-        where: { id: stagiaire.sujetId },
-      });
+    if (dto.statut === StagiaireRapportStatut.VALIDE && !etaitDejaValide) {
+      const sujet = stagiaire.sujetId
+        ? await this.sujetRepository.findOne({ where: { id: stagiaire.sujetId } })
+        : null;
 
       if (sujet) {
         await this.rapportsService.createFromStagiaire({
@@ -242,6 +299,19 @@ async updateProfile(id: number, dto: UpdateStagiaireProfileDto): Promise<Stagiai
           encadrant: stagiaire.encadrantName ?? '',
           departement: stagiaire.departement,
           technologies: sujet.technologies,
+          fichierUrl: stagiaire.rapportFichierUrl ?? null,
+        });
+      }
+      if (!sujet) {
+        const titre = stagiaire.rapportFichierNom?.replace(/\.[^/.]+$/, '') ?? `Rapport de stage — ${stagiaire.name}`;
+        await this.rapportsService.createFromStagiaire({
+          titre,
+          resume: `Rapport de stage de ${stagiaire.name}, validé par ${stagiaire.encadrantName ?? 'son encadrant'}.`,
+          auteur: stagiaire.name,
+          ecole: stagiaire.ecole,
+          encadrant: stagiaire.encadrantName ?? '',
+          departement: stagiaire.departement,
+          technologies: [],
           fichierUrl: stagiaire.rapportFichierUrl ?? null,
         });
       }

@@ -121,6 +121,12 @@ async updateProfile(id: number, dto: UpdateEncadrantProfileDto): Promise<Encadra
     }
     Object.assign(encadrant, dto);
     const saved = await this.encadrantRepository.save(encadrant);
+    if (dto.compteActif !== undefined) {
+      await this.userRepository.update(
+        { encadrantId: id, role: Role.ENCADRANT },
+        { compteActif: dto.compteActif },
+      );
+    }
     return this.withStats(saved);
   }
 

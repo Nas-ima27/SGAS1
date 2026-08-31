@@ -64,7 +64,9 @@ export class AuthService {
 
     // Règle §1 du spec : un compte désactivé ne doit pas pouvoir se connecter.
     if (!user.compteActif) {
-      throw new ForbiddenException('Compte désactivé.');
+      throw new ForbiddenException(
+        'Compte inactif pour le moment, veuillez contacter les RH.',
+      );
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);

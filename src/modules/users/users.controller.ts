@@ -3,12 +3,16 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Param,
+  ParseIntPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUtilisateurDto } from './dto/create-utilisateur.dto';
+import { UpdateUtilisateurStatusDto } from './dto/update-utilisateur-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -45,5 +49,13 @@ export class UsersController {
       );
     }
     return this.usersService.create(dto);
+  }
+
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUtilisateurStatusDto,
+  ) {
+    return this.usersService.updateStatus(id, dto.status);
   }
 }
